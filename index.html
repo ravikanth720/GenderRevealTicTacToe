@@ -504,23 +504,36 @@ function spinReveal(index, color, isLast) {
   return new Promise(resolve => {
     const box = document.querySelector(`.box[data-index="${index}"]`);
     const inner = box.querySelector('.box-inner');
-    const back = document.getElementById(`back-${index}`);
+    const back  = document.getElementById(`back-${index}`);
+    const front = box.querySelector('.box-front');
     if (!box || box.classList.contains('revealed') || currentlySpinning.has(index)) { resolve(); return; }
     currentlySpinning.add(index);
     box.style.pointerEvents = 'none';
 
-    const alt = color === 'blue' ? 'pink' : 'blue';
-    // Odd number of half-flips so the sequence always ends showing the back face.
-    // Regular: 7 half-flips (~1.3 s), 4 back-face shows cycling alt→color→alt→color.
-    // Last box: 11 half-flips (~3.3 s), starts fast and decelerates to a dramatic stop.
+    const alt      = color === 'blue' ? 'pink' : 'blue';
+    const altBg    = alt === 'blue' ? 'linear-gradient(135deg,#4fc3f7,#0288d1)' : 'linear-gradient(135deg,#f48fb1,#c2185b)';
+    const altEmoji = alt === 'blue' ? '👦' : '👧';
+
+    // Replace ❓ on the front face with the alt-gender colour so no ? shows during spin
+    const savedFrontText = front.textContent;
+    const savedFrontBg   = front.style.background;
+    const savedFrontClr  = front.style.color;
+    front.textContent      = altEmoji;
+    front.style.background = altBg;
+    front.style.color      = '#fff';
+
+    // Last box: 25 half-flips, ~5 s total, starts blazing fast and decelerates quickly.
+    // Penultimate back-face show is always the WRONG colour (suspense), final is correct.
+    // Regular: 7 half-flips, ~1.3 s, simple alt→color cycling.
+    // Odd count ensures the sequence always ends on the back face.
     const durations = isLast
-      ? [65, 75, 90, 110, 145, 195, 260, 350, 480, 660, 900]
-      : [120, 130, 140, 150, 170, 190, 380];
+      ? [22,27,31,36,41,47,54,62,72,82,95,109,125,144,166,190,219,252,290,333,383,440,506,582,670]
+      : [120,130,140,150,170,190,380];
 
-    // Prime the back face with the alt color before the first flip
     back.className = `box-back ${alt}`;
-    back.textContent = alt === 'blue' ? '👦' : '👧';
+    back.textContent = altEmoji;
 
+    const totalBackShows = Math.ceil(durations.length / 2); // 13 or 4
     let angle = 0, backCount = 0;
 
     function doStep(i) {
@@ -530,17 +543,20 @@ function spinReveal(index, color, isLast) {
 
       // Odd multiples of 180° show the back face
       if ((angle / 180) % 2 === 1) {
-        // Alternate alt/color/alt/color…, always land on the real color
-        const c = isLastStep ? color : (backCount % 2 === 0 ? alt : color);
-        back.className = `box-back ${c}`;
+        // Normal alt/color cycling — but force penultimate back-show of the last box
+        // to the WRONG colour so viewers think it will land there, then flip to correct.
+        const c = isLastStep                              ? color   // correct answer
+                : (isLast && backCount === totalBackShows - 2) ? alt    // suspense: wrong colour
+                : backCount % 2 === 0                    ? alt
+                :                                          color;
+        back.className   = `box-back ${c}`;
         back.textContent = c === 'blue' ? '👦' : '👧';
         backCount++;
       }
 
-      // Ease-in-out for quick flips; ease-out as the last box decelerates
       const easing = isLastStep
         ? (isLast ? 'ease-out' : 'cubic-bezier(0.34,1.56,0.64,1)')
-        : (isLast && i >= durations.length - 4 ? 'ease-out' : 'ease-in-out');
+        : (isLast && i >= durations.length - 6 ? 'ease-out' : 'ease-in-out');
 
       inner.style.transition = `transform ${dur}ms ${easing}`;
       inner.style.transform  = `rotateY(${angle}deg)`;
@@ -549,9 +565,12 @@ function spinReveal(index, color, isLast) {
         setTimeout(() => doStep(i + 1), dur);
       } else {
         setTimeout(() => {
-          // Snap to canonical 180° (same visual, prevents any future transition glitch)
           inner.style.transition = 'none';
           inner.style.transform  = 'rotateY(180deg)';
+          // Restore the front face (hidden behind the back, so change is invisible)
+          front.textContent      = savedFrontText;
+          front.style.background = savedFrontBg;
+          front.style.color      = savedFrontClr;
           box.classList.add('revealed');
           box.style.pointerEvents = '';
           currentlySpinning.delete(index);
