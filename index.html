@@ -132,7 +132,7 @@
     .box.revealed .box-inner { transform: rotateY(180deg); }
     .box-front, .box-back {
       position: absolute; inset: 0;
-      border-radius: clamp(14px, 2vw, 22px);
+      border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
       backface-visibility: hidden;
       font-size: clamp(2rem, 5.5vw, 3.8rem);
@@ -244,7 +244,7 @@
         gap: 22px;
       }
       .box { width: 210px; height: 210px; }
-      .box-front, .box-back { font-size: 4.6rem; border-radius: 26px; }
+      .box-front, .box-back { font-size: 4.6rem; border-radius: 50%; }
       #subtitleText { font-size: 1.3rem; margin-bottom: 2.2rem; }
       #statusText   { font-size: 1rem;   letter-spacing: .16em; margin-top: 1.6rem; }
       #hintText     { font-size: .92rem; margin-top: .5rem; }
@@ -265,7 +265,7 @@
         gap: 28px;
       }
       .box { width: 270px; height: 270px; }
-      .box-front, .box-back { font-size: 6rem; border-radius: 32px; }
+      .box-front, .box-back { font-size: 6rem; border-radius: 50%; }
       #subtitleText { font-size: 1.6rem; }
       #statusText   { font-size: 1.2rem; margin-top: 2rem; }
       #hintText     { font-size: 1.1rem; }
@@ -378,9 +378,6 @@ let revealedCount = 0;
 let celebrationShown = false;
 let locallyRevealed  = new Set();   // boxes already animated on this device
 let audioCtx = null;
-let phase = 'draw';
-let setupTarget = null;   // decoded array (9 elements), predetermined reveal colors
-let prevPhase = 'draw';
 
 // ─── Firebase init ────────────────────────────────────────
 function initFirebase() {
@@ -415,7 +412,6 @@ async function createRoom(g) {
   await db.ref(`rooms/${roomId}`).set({
     gender: g, boxes: '_________', revealedCount: 0,
     gameOver: false, createdAt: Date.now(),
-    phase: 'draw', setupTarget: null,
   });
   const url = shareUrl();
   document.getElementById('shareUrl').textContent = url;
@@ -467,38 +463,35 @@ function buildGrid() {
 }
 
 // ════════════════════════════════════════════════════════════
-//  Draw-then-Reveal Algorithm
+//  Color-Picking Algorithm
 // ════════════════════════════════════════════════════════════
 
 const WIN_LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 
-// Phase 1: pick a color that avoids 3-in-a-row and maintains 4+4 balance
-function pickDrawColor(index, state) {
-  const blues = state.filter(c => c === 'blue').length;
-  const pinks = state.filter(c => c === 'pink').length;
+// Positions 0,4 are fixed to actColor; 2,5 fixed to otherColor.
+// This guarantees [0,4,8] and [2,5,8] both point to square 8 as the final reveal,
+// with no intermediate flip-close phase needed.
+// Positions 1,3,6,7 are assigned dynamically, checked against the projected full board.
+function pickDrawColor(index) {
+  const other = actualColor === 'blue' ? 'pink' : 'blue';
+  if (index === 0 || index === 4) return actualColor;
+  if (index === 2 || index === 5) return other;
+  // Project fixed positions into the state for safe 3-in-a-row checking
+  const fullState = [...boxColors];
+  if (fullState[0] === null) fullState[0] = actualColor;
+  if (fullState[4] === null) fullState[4] = actualColor;
+  if (fullState[2] === null) fullState[2] = other;
+  if (fullState[5] === null) fullState[5] = other;
+  const blues = fullState.filter(c => c === 'blue').length;
+  const pinks = fullState.filter(c => c === 'pink').length;
   const order = blues <= pinks ? ['blue','pink'] : ['pink','blue'];
   for (const color of order) {
-    if (color === 'blue' && blues >= 4) continue;
-    if (color === 'pink' && pinks >= 4) continue;
-    const test = [...state]; test[index] = color;
+    const test = [...fullState]; test[index] = color;
     if (!WIN_LINES.some(l => l.includes(index) && l.every(i => test[i] === color))) {
       return color;
     }
   }
-  return blues < 4 ? 'blue' : 'pink';
-}
-
-// Phase 2: compute final board so [0,4,8] wins for actColor and [2,5,8] wins for otherColor
-function computeSetupTarget(drawBoard, actColor) {
-  const other = actColor === 'blue' ? 'pink' : 'blue';
-  const t = [...drawBoard];
-  t[0] = actColor; t[4] = actColor; t[8] = actColor;
-  t[2] = other;    t[5] = other;
-  // Fix [0,3,6] if needed
-  if (t[3] === actColor && t[6] === actColor) t[6] = other;
-  // Fix [1,4,7] if needed
-  if (t[1] === actColor && t[7] === actColor) t[7] = other;
-  return t;
+  return blues <= pinks ? 'blue' : 'pink';
 }
 
 // ════════════════════════════════════════════════════════════
@@ -515,51 +508,28 @@ function spinReveal(index, color, isLast) {
     if (!box || box.classList.contains('revealed') || currentlySpinning.has(index)) { resolve(); return; }
     currentlySpinning.add(index);
     box.style.pointerEvents = 'none';
-    inner.style.transition = 'transform 0.12s ease';
-    const timings = isLast
-      ? [55,60,68,80,97,120,150,195,250,320,400]
-      : [65,75,90,110,145,195,260,330];
-    let step = 0, faceUp = true;
-    function tick() {
-      faceUp = !faceUp;
-      if (!faceUp) {
-        const c = (step % 4 < 2) ? 'blue' : 'pink'; // alternate in pairs
-        back.className = `box-back ${c}`;
-        back.textContent = c === 'blue' ? '👦' : '👧';
-        inner.style.transform = 'rotateY(180deg)';
-      } else {
-        inner.style.transform = 'rotateY(0deg)';
-      }
-      step++;
-      if (step < timings.length) {
-        setTimeout(tick, timings[step - 1]);
-      } else {
-        setTimeout(() => {
-          back.className = `box-back ${color}`;
-          back.textContent = color === 'blue' ? '👦' : '👧';
-          inner.style.transition = 'transform 0.5s cubic-bezier(.34,1.56,.64,1)';
-          inner.style.transform = 'rotateY(180deg)';
-          box.classList.add('revealed');
-          box.style.pointerEvents = '';
-          currentlySpinning.delete(index);
-          setTimeout(resolve, 550);
-        }, 120);
-      }
+    back.className = `box-back ${color}`;
+    back.textContent = color === 'blue' ? '👦' : '👧';
+    if (isLast) {
+      // Coin-spin: 5.5 rotations decelerating to rest on the back face
+      inner.style.transition = 'transform 1.4s cubic-bezier(0.15, 0.85, 0.35, 1.0)';
+      inner.style.transform = 'rotateY(1980deg)'; // 1980 = 11×180, ends showing back
+      setTimeout(() => {
+        inner.style.transition = 'none';
+        inner.style.transform = 'rotateY(180deg)'; // same visual, locks position
+        box.classList.add('revealed');
+        box.style.pointerEvents = '';
+        currentlySpinning.delete(index);
+        setTimeout(resolve, 100);
+      }, 1500);
+    } else {
+      inner.style.transition = 'transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1)';
+      inner.style.transform = 'rotateY(180deg)';
+      box.classList.add('revealed');
+      box.style.pointerEvents = '';
+      currentlySpinning.delete(index);
+      setTimeout(resolve, 650);
     }
-    setTimeout(tick, 60);
-  });
-}
-
-// Reverse card-flip back to ❓ (for reveal-phase re-close animation)
-function flipClose(index) {
-  return new Promise(resolve => {
-    const box = document.querySelector(`.box[data-index="${index}"]`);
-    if (!box || !box.classList.contains('revealed')) { resolve(); return; }
-    const inner = box.querySelector('.box-inner');
-    inner.style.transition = 'transform 0.5s cubic-bezier(.34,1.56,.64,1)';
-    inner.style.transform = 'rotateY(0deg)';
-    box.classList.remove('revealed', 'hb-blue', 'hb-pink', 'intensified', 'last-glow', 'winner');
-    setTimeout(resolve, 550);
   });
 }
 
@@ -643,27 +613,6 @@ function subscribeToRoom() {
     boxColors = decode(state.boxes);
     revealedCount = state.revealedCount || 0;
 
-    const newPhase = state.phase || 'draw';
-    const newSetupTarget = state.setupTarget ? decode(state.setupTarget) : null;
-
-    // Detect draw → reveal phase transition: flip-close squares that were revealed but are now null
-    if (prevPhase === 'draw' && newPhase === 'reveal') {
-      const toFlipClose = [];
-      for (let i = 0; i < 9; i++) {
-        if (locallyRevealed.has(i) && boxColors[i] === null) {
-          toFlipClose.push(i);
-          locallyRevealed.delete(i);
-        }
-      }
-      toFlipClose.forEach((idx, k) => {
-        setTimeout(() => flipClose(idx), k * 400);
-      });
-    }
-
-    prevPhase = newPhase;
-    phase = newPhase;
-    setupTarget = newSetupTarget;
-
     const newlyRevealed = [];
     boxColors.forEach((color, i) => {
       if (color && !locallyRevealed.has(i)) {
@@ -732,42 +681,13 @@ function updateMessages() {
 // ─── Click handler ────────────────────────────────────────
 function handleClick(index) {
   if (!roomRef || boxColors[index] !== null || celebrationShown) return;
-
-  if (phase === 'draw') {
-    const color = pickDrawColor(index, boxColors);
-    const newBoxColors = [...boxColors];
-    newBoxColors[index] = color;
-    const newCount = revealedCount + 1;
-
-    if (newCount === 9) {
-      // Draw complete — compute reveal phase setup
-      const target = computeSetupTarget(newBoxColors, actualColor);
-      const reCloseSet = new Set();
-      for (let i = 0; i < 9; i++) {
-        if (i === 8 || target[i] !== newBoxColors[i]) reCloseSet.add(i);
-      }
-      const revealBoxes = target.map((c, i) => reCloseSet.has(i) ? null : c);
-      roomRef.update({
-        boxes: encode(revealBoxes),
-        revealedCount: 9 - reCloseSet.size,
-        gameOver: false,
-        phase: 'reveal',
-        setupTarget: encode(target),
-      });
-    } else {
-      roomRef.update({ boxes: encode(newBoxColors), revealedCount: newCount });
-    }
-  } else {
-    // Reveal phase — box 8 can only be clicked when it's the sole remaining null
-    if (index === 8 && boxColors.some((c, i) => c === null && i !== 8)) return;
-    if (!setupTarget) return;
-    const color = setupTarget[index];
-    if (!color) return;
-    const newBoxColors = [...boxColors];
-    newBoxColors[index] = color;
-    const newCount = revealedCount + 1;
-    roomRef.update({ boxes: encode(newBoxColors), revealedCount: newCount, gameOver: newCount === 9 });
-  }
+  // Square 8 is always the final reveal — blocked until all others are clicked
+  if (index === 8 && revealedCount < 8) return;
+  const color = index === 8 ? actualColor : pickDrawColor(index);
+  const newBoxColors = [...boxColors];
+  newBoxColors[index] = color;
+  const newCount = revealedCount + 1;
+  roomRef.update({ boxes: encode(newBoxColors), revealedCount: newCount, gameOver: index === 8 });
 }
 
 // ─── Celebration ─────────────────────────────────────────
