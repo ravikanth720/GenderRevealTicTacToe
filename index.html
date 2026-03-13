@@ -508,28 +508,59 @@ function spinReveal(index, color, isLast) {
     if (!box || box.classList.contains('revealed') || currentlySpinning.has(index)) { resolve(); return; }
     currentlySpinning.add(index);
     box.style.pointerEvents = 'none';
-    back.className = `box-back ${color}`;
-    back.textContent = color === 'blue' ? '👦' : '👧';
-    if (isLast) {
-      // Coin-spin: 5.5 rotations decelerating to rest on the back face
-      inner.style.transition = 'transform 1.4s cubic-bezier(0.15, 0.85, 0.35, 1.0)';
-      inner.style.transform = 'rotateY(1980deg)'; // 1980 = 11×180, ends showing back
-      setTimeout(() => {
-        inner.style.transition = 'none';
-        inner.style.transform = 'rotateY(180deg)'; // same visual, locks position
-        box.classList.add('revealed');
-        box.style.pointerEvents = '';
-        currentlySpinning.delete(index);
-        setTimeout(resolve, 100);
-      }, 1500);
-    } else {
-      inner.style.transition = 'transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1)';
-      inner.style.transform = 'rotateY(180deg)';
-      box.classList.add('revealed');
-      box.style.pointerEvents = '';
-      currentlySpinning.delete(index);
-      setTimeout(resolve, 650);
+
+    const alt = color === 'blue' ? 'pink' : 'blue';
+    // Odd number of half-flips so the sequence always ends showing the back face.
+    // Regular: 7 half-flips (~1.3 s), 4 back-face shows cycling alt→color→alt→color.
+    // Last box: 11 half-flips (~3.3 s), starts fast and decelerates to a dramatic stop.
+    const durations = isLast
+      ? [65, 75, 90, 110, 145, 195, 260, 350, 480, 660, 900]
+      : [120, 130, 140, 150, 170, 190, 380];
+
+    // Prime the back face with the alt color before the first flip
+    back.className = `box-back ${alt}`;
+    back.textContent = alt === 'blue' ? '👦' : '👧';
+
+    let angle = 0, backCount = 0;
+
+    function doStep(i) {
+      const dur = durations[i];
+      const isLastStep = i === durations.length - 1;
+      angle += 180;
+
+      // Odd multiples of 180° show the back face
+      if ((angle / 180) % 2 === 1) {
+        // Alternate alt/color/alt/color…, always land on the real color
+        const c = isLastStep ? color : (backCount % 2 === 0 ? alt : color);
+        back.className = `box-back ${c}`;
+        back.textContent = c === 'blue' ? '👦' : '👧';
+        backCount++;
+      }
+
+      // Ease-in-out for quick flips; ease-out as the last box decelerates
+      const easing = isLastStep
+        ? (isLast ? 'ease-out' : 'cubic-bezier(0.34,1.56,0.64,1)')
+        : (isLast && i >= durations.length - 4 ? 'ease-out' : 'ease-in-out');
+
+      inner.style.transition = `transform ${dur}ms ${easing}`;
+      inner.style.transform  = `rotateY(${angle}deg)`;
+
+      if (!isLastStep) {
+        setTimeout(() => doStep(i + 1), dur);
+      } else {
+        setTimeout(() => {
+          // Snap to canonical 180° (same visual, prevents any future transition glitch)
+          inner.style.transition = 'none';
+          inner.style.transform  = 'rotateY(180deg)';
+          box.classList.add('revealed');
+          box.style.pointerEvents = '';
+          currentlySpinning.delete(index);
+          resolve();
+        }, dur + 80);
+      }
     }
+
+    doStep(0);
   });
 }
 
