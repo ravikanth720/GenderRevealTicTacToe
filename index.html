@@ -716,6 +716,13 @@ function subscribeToRoom() {
     const state = snap.val();
     if (!state) { showRoomError(); return; }
 
+    // If the default room was reset while this client was on the celebration
+    // screen, reload so everyone gets a fresh board automatically.
+    if (USE_DEFAULT_ROOM && celebrationShown && !state.gameOver) {
+      location.reload();
+      return;
+    }
+
     gender = state.gender;
     actualColor = gender === 'boy' ? 'blue' : 'pink';
     boxColors = decode(state.boxes);
@@ -808,7 +815,18 @@ function showCelebration() {
   launchConfetti(isBoy);
 }
 
-function newGame() { location.href = location.pathname; }
+function newGame() {
+  if (USE_DEFAULT_ROOM && roomRef) {
+    // Reset the shared room in Firebase — the subscription on every connected
+    // client will detect gameOver flipping back to false and trigger a reload.
+    roomRef.set({
+      gender: DEFAULT_GENDER, boxes: '_________', revealedCount: 0,
+      gameOver: false, createdAt: Date.now(),
+    });
+  } else {
+    location.href = location.pathname;
+  }
+}
 
 function showRoomError() {
   const el = document.getElementById('gameScreen');
