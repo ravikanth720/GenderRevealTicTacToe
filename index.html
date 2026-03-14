@@ -817,12 +817,14 @@ function showCelebration() {
 
 function newGame() {
   if (USE_DEFAULT_ROOM && roomRef) {
-    // Reset the shared room in Firebase — the subscription on every connected
-    // client will detect gameOver flipping back to false and trigger a reload.
+    // Detach subscription first so the optimistic local write doesn't trigger
+    // a reload before the server confirms the reset. Only reload after the
+    // server confirms the write, so the fresh page reads the clean state.
+    roomRef.off();
     roomRef.set({
       gender: DEFAULT_GENDER, boxes: '_________', revealedCount: 0,
       gameOver: false, createdAt: Date.now(),
-    });
+    }).then(() => location.reload());
   } else {
     location.href = location.pathname;
   }
@@ -1113,7 +1115,7 @@ async function init() {
   } else if (USE_DEFAULT_ROOM) {
     roomId = DEFAULT_ROOM_ID;
     const snap = await db.ref(`rooms/${roomId}`).once('value');
-    if (!snap.exists()) {
+    if (!snap.exists() || snap.val().gameOver) {
       await db.ref(`rooms/${roomId}`).set({
         gender: DEFAULT_GENDER, boxes: '_________', revealedCount: 0,
         gameOver: false, createdAt: Date.now(),
