@@ -123,16 +123,20 @@
     }
 
     /* ── Grid ── */
+    /* Square grid sized to fit in both dimensions: 60vh caps height, 88vw caps width */
     .grid {
       display: grid;
-      grid-template-columns: repeat(3, clamp(88px, min(22vw, 22vh), 210px));
-      grid-template-rows:    repeat(3, clamp(88px, min(22vw, 22vh), 210px));
-      gap: clamp(9px, 2vw, 22px);
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows:    repeat(3, 1fr);
+      gap: clamp(8px, 1.5vw, 20px);
+      width: min(88vw, 60vh);
+      max-width: 680px;
+      aspect-ratio: 1;
       margin: 0 auto;
     }
 
     /* ── Box / flip card ── */
-    .box { width: clamp(88px, min(22vw, 22vh), 210px); height: clamp(88px, min(22vw, 22vh), 210px); perspective: 900px; cursor: pointer; }
+    .box { width: 100%; aspect-ratio: 1; perspective: 900px; cursor: pointer; }
     .box-inner {
       position: relative; width: 100%; height: 100%;
       transform-style: preserve-3d;
@@ -144,7 +148,7 @@
       border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
       backface-visibility: hidden;
-      font-size: clamp(2rem, 5.5vw, 3.8rem);
+      font-size: clamp(1.8rem, min(5.5vw, 7vh), 4rem);
     }
     .box-front {
       background: linear-gradient(145deg,#1e2d6e,#0e1a40);
@@ -247,13 +251,6 @@
       .sub         { font-size: 1.15rem; margin-bottom: 2.4rem; }
       .gbtn        { font-size: 1.4rem; padding: 1.2rem 3rem; }
       .screen      { max-width: 960px; padding: 2.5rem; }
-      .grid {
-        grid-template-columns: repeat(3, min(210px, 20vh));
-        grid-template-rows:    repeat(3, min(210px, 20vh));
-        gap: 22px;
-      }
-      .box { width: min(210px, 20vh); height: min(210px, 20vh); }
-      .box-front, .box-back { font-size: 4.6rem; border-radius: 50%; }
       #subtitleText { font-size: 1.3rem; margin-bottom: 2.2rem; }
       #statusText   { font-size: 1rem;   letter-spacing: .16em; margin-top: 1.6rem; }
       #hintText     { font-size: .92rem; margin-top: .5rem; }
@@ -268,13 +265,6 @@
       .title       { font-size: 5rem; }
       .sub         { font-size: 1.4rem; }
       .screen      { max-width: 1200px; }
-      .grid {
-        grid-template-columns: repeat(3, min(270px, 20vh));
-        grid-template-rows:    repeat(3, min(270px, 20vh));
-        gap: 28px;
-      }
-      .box { width: min(270px, 20vh); height: min(270px, 20vh); }
-      .box-front, .box-back { font-size: 6rem; border-radius: 50%; }
       #subtitleText { font-size: 1.6rem; }
       #statusText   { font-size: 1.2rem; margin-top: 2rem; }
       #hintText     { font-size: 1.1rem; }
@@ -536,7 +526,8 @@ function spinReveal(index, color, isLast) {
     // Regular: 7 half-flips, ~1.3 s, simple alt→color cycling.
     // Odd count ensures the sequence always ends on the back face.
     const durations = isLast
-      ? [22,27,31,36,41,47,54,62,72,82,95,109,125,144,166,190,219,252,290,333,383,440,506,582,670]
+      // 25 half-flips. First 18 stay rapid for suspense; last 7 slowed ~1.4× for a dramatic landing.
+      ? [22,27,31,36,41,47,54,62,72,82,95,109,125,144,166,190,219,252,406,466,536,616,708,818,938]
       : [120,130,140,150,170,190,380];
 
     back.className = `box-back ${alt}`;
@@ -614,11 +605,11 @@ function playThump(volume = 0.4) {
 
 function startHeartbeat(fast = false) {
   stopHeartbeat();
-  const interval = fast ? 500 : 1000;
+  const interval = fast ? 650 : 1000;
   const vol = fast ? 0.55 : 0.35;
   function beat() {
     playThump(vol);
-    setTimeout(() => playThump(vol * 0.8), fast ? 180 : 280);
+    setTimeout(() => playThump(vol * 0.8), fast ? 200 : 280);
   }
   beat();
   heartbeatTimer = setInterval(beat, interval);
@@ -686,10 +677,10 @@ function subscribeToRoom() {
       // Intensify existing heartbeats
       document.querySelectorAll('.hb-blue, .hb-pink').forEach(el => el.classList.add('intensified'));
       stopHeartbeat();
-      startHeartbeat(true); // fast mode
+      startHeartbeat(true); // fast mode — keeps beating through the entire coin flip
       setTimeout(async () => {
-        stopHeartbeat();
         await spinReveal(index, color, true);
+        stopHeartbeat(); // stop only after the flip lands
         flashWinnerLine(index);
         setTimeout(() => {
           playFanfare(gender === 'boy');
