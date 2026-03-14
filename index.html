@@ -116,14 +116,14 @@
     /* ── Grid ── */
     .grid {
       display: grid;
-      grid-template-columns: repeat(3, clamp(88px, 22vw, 210px));
-      grid-template-rows:    repeat(3, clamp(88px, 22vw, 210px));
+      grid-template-columns: repeat(3, clamp(88px, min(22vw, 22vh), 210px));
+      grid-template-rows:    repeat(3, clamp(88px, min(22vw, 22vh), 210px));
       gap: clamp(9px, 2vw, 22px);
       margin: 0 auto;
     }
 
     /* ── Box / flip card ── */
-    .box { width: clamp(88px, 22vw, 210px); height: clamp(88px, 22vw, 210px); perspective: 900px; cursor: pointer; }
+    .box { width: clamp(88px, min(22vw, 22vh), 210px); height: clamp(88px, min(22vw, 22vh), 210px); perspective: 900px; cursor: pointer; }
     .box-inner {
       position: relative; width: 100%; height: 100%;
       transform-style: preserve-3d;
@@ -239,11 +239,11 @@
       .gbtn        { font-size: 1.4rem; padding: 1.2rem 3rem; }
       .screen      { max-width: 960px; padding: 2.5rem; }
       .grid {
-        grid-template-columns: repeat(3, 210px);
-        grid-template-rows:    repeat(3, 210px);
+        grid-template-columns: repeat(3, min(210px, 20vh));
+        grid-template-rows:    repeat(3, min(210px, 20vh));
         gap: 22px;
       }
-      .box { width: 210px; height: 210px; }
+      .box { width: min(210px, 20vh); height: min(210px, 20vh); }
       .box-front, .box-back { font-size: 4.6rem; border-radius: 50%; }
       #subtitleText { font-size: 1.3rem; margin-bottom: 2.2rem; }
       #statusText   { font-size: 1rem;   letter-spacing: .16em; margin-top: 1.6rem; }
@@ -260,11 +260,11 @@
       .sub         { font-size: 1.4rem; }
       .screen      { max-width: 1200px; }
       .grid {
-        grid-template-columns: repeat(3, 270px);
-        grid-template-rows:    repeat(3, 270px);
+        grid-template-columns: repeat(3, min(270px, 20vh));
+        grid-template-rows:    repeat(3, min(270px, 20vh));
         gap: 28px;
       }
-      .box { width: 270px; height: 270px; }
+      .box { width: min(270px, 20vh); height: min(270px, 20vh); }
       .box-front, .box-back { font-size: 6rem; border-radius: 50%; }
       #subtitleText { font-size: 1.6rem; }
       #statusText   { font-size: 1.2rem; margin-top: 2rem; }
