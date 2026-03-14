@@ -712,9 +712,22 @@ function flashWinnerLine(lastIdx) {
 // ─── Firebase subscription (drives all UI) ───────────────
 function subscribeToRoom() {
   roomRef = db.ref(`rooms/${roomId}`);
+  let isFirstFire = true;
   roomRef.on('value', snap => {
     const state = snap.val();
     if (!state) { showRoomError(); return; }
+
+    // On fresh page load, if the game is already over in the default room,
+    // reset it immediately instead of replaying the final reveal animation.
+    if (isFirstFire && USE_DEFAULT_ROOM && roomId === DEFAULT_ROOM_ID && state.gameOver) {
+      isFirstFire = false;
+      roomRef.set({
+        gender: DEFAULT_GENDER, boxes: '_________', revealedCount: 0,
+        gameOver: false, createdAt: Date.now(),
+      });
+      return; // subscription will fire again with the reset data
+    }
+    isFirstFire = false;
 
     // If the default room was reset while this client was on the celebration
     // screen, reload so everyone gets a fresh board automatically.
@@ -1115,7 +1128,7 @@ async function init() {
   } else if (USE_DEFAULT_ROOM) {
     roomId = DEFAULT_ROOM_ID;
     const snap = await db.ref(`rooms/${roomId}`).once('value');
-    if (!snap.exists() || snap.val().gameOver) {
+    if (!snap.exists()) {
       await db.ref(`rooms/${roomId}`).set({
         gender: DEFAULT_GENDER, boxes: '_________', revealedCount: 0,
         gameOver: false, createdAt: Date.now(),
